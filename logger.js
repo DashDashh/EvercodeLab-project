@@ -30,5 +30,4 @@ const logger = createLogger();
 module.exports = {
   logger,
   createLogger,
-  formatMessage,
 };
