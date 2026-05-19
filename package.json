@@ -4,7 +4,9 @@
   "description": "��#\u0000 \u0000P\u0000r\u0000o\u0000j\u0000e\u0000c\u0000t\u0000 \u0000f\u0000o\u0000r\u0000 \u0000E\u0000v\u0000e\u0000r\u0000c\u0000o\u0000d\u0000e\u0000L\u0000a\u0000b\u0000\r\u0000 \u0000",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "repository": {
     "type": "git",
@@ -16,5 +18,11 @@
   "bugs": {
     "url": "https://github.com/DashDashh/EvercodeLab-project/issues"
   },
-  "homepage": "https://github.com/DashDashh/EvercodeLab-project#readme"
+  "homepage": "https://github.com/DashDashh/EvercodeLab-project#readme",
+  "devDependencies": {
+    "jest": "^30.4.2"
+  }
+
+  
 }
+
