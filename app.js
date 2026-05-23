@@ -1,6 +1,34 @@
+const express = require("express");
 const config = require("./config");
 const { logger } = require("./logger");
 const { scheduleTask, getActiveTasks, stopAllTasks } = require("./scheduler");
+
+const app = express();
+
+app.use(express.json());
+
+app.use((req, res, next) => {
+  logger(`${req.method} ${req.path}`, "debug");
+  next();
+});
+
+app.get("/status", (req, res) => {
+  res.status(200).send("ok");
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    appName: config.appName,
+    environment: config.environment,
+    version: config.version,
+    timestamp: new Date().toISOString(),
+    activeTasks: getActiveTasks().map((task) => ({
+      name: task.name,
+      interval: task.interval,
+    })),
+  });
+});
 
 function initializeApp() {
   logger(`Application "${config.appName}" started`, "info");
@@ -52,13 +80,29 @@ function setupGracefulShutdown() {
   });
 }
 
+let server = null;
+
+function startServer() {
+  const PORT = process.env.PORT || 3000;
+  server = app.listen(PORT, () => {
+    logger(`HTTP server listening on port ${PORT}`, "info");
+    logger(`Health check: http://localhost:${PORT}/status`, "info");
+  });
+  return server;
+}
+
 function main() {
   initializeApp();
   runDemoLogs();
   runCustomLoggerDemo();
   setupPeriodicTasks();
   displayActiveTasks();
+  startServer();
   setupGracefulShutdown();
 }
 
-main();
+module.exports = { app, server };
+
+if (require.main === module) {
+  main();
+}
