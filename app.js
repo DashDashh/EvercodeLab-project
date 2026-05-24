@@ -3,6 +3,8 @@ const config = require("./config");
 const { logger } = require("./logger");
 const { scheduleTask, getActiveTasks, stopAllTasks } = require("./scheduler");
 
+const { authenticateToken } = require("./middleware/auth");
+
 const app = express();
 
 app.use(express.json());
@@ -16,7 +18,7 @@ app.get("/status", (req, res) => {
   res.status(200).send("ok");
 });
 
-app.get("/health", (req, res) => {
+app.get("/health", authenticateToken, (req, res) => {
   res.status(200).json({
     status: "ok",
     appName: config.appName,
