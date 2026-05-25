@@ -1,0 +1,291 @@
+openapi: 3.0.0
+info:
+  title: EvercodeLab Project API
+  description: API для управления валютами и мониторинга
+  version: 1.0.0
+  contact:
+    name: Support
+    email: support@evercodelab.com
+
+servers:
+  - url: http://localhost:3000
+    description: Development server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
+      description: 64-значный токен из .env файла
+
+  schemas:
+    Currency:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Уникальный идентификатор валюты
+          example: "1"
+        name:
+          type: string
+          description: Полное название валюты
+          example: "Bitcoin"
+        ticker:
+          type: string
+          description: Тикер валюты (3-10 символов)
+          example: "BTC"
+        createdAt:
+          type: string
+          format: date-time
+          description: Дата создания
+        updatedAt:
+          type: string
+          format: date-time
+          description: Дата последнего обновления
+      required:
+        - id
+        - name
+        - ticker
+
+    CreateCurrencyRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Полное название валюты
+          minLength: 1
+          maxLength: 100
+          example: "Ethereum"
+        ticker:
+          type: string
+          description: Тикер валюты
+          minLength: 1
+          maxLength: 10
+          example: "ETH"
+      required:
+        - name
+        - ticker
+
+    UpdateCurrencyRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Полное название валюты
+          minLength: 1
+          maxLength: 100
+          example: "Ethereum Classic"
+        ticker:
+          type: string
+          description: Тикер валюты
+          minLength: 1
+          maxLength: 10
+          example: "ETC"
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Bad Request"
+        message:
+          type: string
+          example: "Поля name и ticker обязательны"
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Currency'
+
+    CurrenciesListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Currency'
+        count:
+          type: integer
+          example: 3
+
+security:
+  - bearerAuth: []
+
+paths:
+  # Мониторинг
+  /status:
+    get:
+      summary: Проверка статуса сервера
+      description: Публичный эндпоинт для мониторинга (без авторизации)
+      security: []
+      responses:
+        '200':
+          description: Сервер работает
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "ok"
+
+  /health:
+    get:
+      summary: Детальная информация о здоровье приложения
+      description: Возвращает информацию о состоянии приложения и активных задачах
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  appName:
+                    type: string
+                  environment:
+                    type: string
+                  version:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+                  activeTasks:
+                    type: array
+                    items:
+                      type: object
+        '401':
+          description: Отсутствует токен авторизации
+        '403':
+          description: Недействительный токен
+
+  # CRUD для валют
+  /api/currencies:
+    get:
+      summary: Получить список всех валют
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrenciesListResponse'
+        '401':
+          description: Отсутствует токен авторизации
+        '403':
+          description: Недействительный токен
+
+    post:
+      summary: Создать новую валюту
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCurrencyRequest'
+      responses:
+        '201':
+          description: Валюта успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Неверные данные запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Валюта с таким тикером уже существует
+        '401':
+          description: Отсутствует токен авторизации
+
+  /api/currencies/{id}:
+    get:
+      summary: Получить валюту по ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID валюты
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Валюта не найдена
+        '401':
+          description: Отсутствует токен авторизации
+
+    put:
+      summary: Обновить валюту
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCurrencyRequest'
+      responses:
+        '200':
+          description: Валюта успешно обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Неверные данные запроса
+        '404':
+          description: Валюта не найдена
+        '409':
+          description: Валюта с таким тикером уже существует
+        '401':
+          description: Отсутствует токен авторизации
+
+    delete:
+      summary: Удалить валюту
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Валюта успешно удалена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '404':
+          description: Валюта не найдена
+        '401':
+          description: Отсутствует токен авторизации

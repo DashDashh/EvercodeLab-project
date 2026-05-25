@@ -4,6 +4,7 @@ const { logger } = require("./logger");
 const { scheduleTask, getActiveTasks, stopAllTasks } = require("./scheduler");
 
 const { authenticateToken } = require("./middleware/auth");
+const currencyService = require("./services/currencyService");
 
 const app = express();
 
@@ -29,6 +30,144 @@ app.get("/health", authenticateToken, (req, res) => {
       name: task.name,
       interval: task.interval,
     })),
+  });
+});
+
+app.get("/api/currencies", authenticateToken, (req, res) => {
+  const currencies = currencyService.getAll();
+  res.status(200).json({
+    success: true,
+    data: currencies,
+    count: currencies.length,
+  });
+});
+
+app.get("/api/currencies/:id", authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const currency = currencyService.getById(id);
+
+  if (!currency) {
+    return res.status(404).json({
+      success: false,
+      error: "Not Found",
+      message: `Валюта с id ${id} не найдена`,
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: currency,
+  });
+});
+
+app.post("/api/currencies", authenticateToken, (req, res) => {
+  const { name, ticker } = req.body;
+
+  if (!name || !ticker) {
+    return res.status(400).json({
+      success: false,
+      error: "Bad Request",
+      message: "Поля name и ticker обязательны",
+    });
+  }
+
+  if (typeof name !== "string" || typeof ticker !== "string") {
+    return res.status(400).json({
+      success: false,
+      error: "Bad Request",
+      message: "name и ticker должны быть строками",
+    });
+  }
+
+  if (name.length < 1 || name.length > 100) {
+    return res.status(400).json({
+      success: false,
+      error: "Bad Request",
+      message: "name должен быть от 1 до 100 символов",
+    });
+  }
+
+  if (ticker.length < 1 || ticker.length > 10) {
+    return res.status(400).json({
+      success: false,
+      error: "Bad Request",
+      message: "ticker должен быть от 1 до 10 символов",
+    });
+  }
+
+  if (currencyService.existsByTicker(ticker)) {
+    return res.status(409).json({
+      success: false,
+      error: "Conflict",
+      message: `Валюта с тикером ${ticker.toUpperCase()} уже существует`,
+    });
+  }
+
+  const currency = currencyService.create(name, ticker);
+  res.status(201).json({
+    success: true,
+    data: currency,
+  });
+});
+
+app.put("/api/currencies/:id", authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const { name, ticker } = req.body;
+
+  if (!name && !ticker) {
+    return res.status(400).json({
+      success: false,
+      error: "Bad Request",
+      message:
+        "Нужно указать хотя бы одно поле для обновления (name или ticker)",
+    });
+  }
+
+  const currency = currencyService.getById(id);
+  if (!currency) {
+    return res.status(404).json({
+      success: false,
+      error: "Not Found",
+      message: `Валюта с id ${id} не найдена`,
+    });
+  }
+
+  const newName = name || currency.name;
+  const newTicker = ticker || currency.ticker;
+
+  if (ticker && ticker.toUpperCase() !== currency.ticker) {
+    if (currencyService.existsByTicker(ticker)) {
+      return res.status(409).json({
+        success: false,
+        error: "Conflict",
+        message: `Валюта с тикером ${ticker.toUpperCase()} уже существует`,
+      });
+    }
+  }
+
+  const updated = currencyService.update(id, newName, newTicker);
+  res.status(200).json({
+    success: true,
+    data: updated,
+  });
+});
+
+app.delete("/api/currencies/:id", authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const currency = currencyService.getById(id);
+
+  if (!currency) {
+    return res.status(404).json({
+      success: false,
+      error: "Not Found",
+      message: `Валюта с id ${id} не найдена`,
+    });
+  }
+
+  currencyService.delete(id);
+  res.status(200).json({
+    success: true,
+    message: `Валюта ${currency.name} (${currency.ticker}) успешно удалена`,
   });
 });
 
