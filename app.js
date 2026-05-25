@@ -5,6 +5,7 @@ const { scheduleTask, getActiveTasks, stopAllTasks } = require("./scheduler");
 
 const { authenticateToken } = require("./middleware/auth");
 const currencyService = require("./services/currencyService");
+const binanceService = require("./services/binanceService");
 
 const app = express();
 
@@ -169,6 +170,127 @@ app.delete("/api/currencies/:id", authenticateToken, (req, res) => {
     success: true,
     message: `Валюта ${currency.name} (${currency.ticker}) успешно удалена`,
   });
+});
+
+app.get("/price", authenticateToken, async (req, res) => {
+  const { currency } = req.query;
+
+  // Валидация параметра currency
+  if (!currency) {
+    return res.status(400).json({
+      success: false,
+      error: "Bad Request",
+      message: 'Параметр "currency" обязателен. Пример: /price?currency=BTC',
+    });
+  }
+
+  if (
+    typeof currency !== "string" ||
+    currency.length < 1 ||
+    currency.length > 10
+  ) {
+    return res.status(400).json({
+      success: false,
+      error: "Bad Request",
+      message: 'Параметр "currency" должен быть строкой от 1 до 10 символов',
+    });
+  }
+
+  const upperCurrency = currency.toUpperCase();
+
+  try {
+    // Проверяем, существует ли валюта в нашей базе (по ticker)
+    const currencyExists = currencyService.existsByTicker(upperCurrency);
+
+    if (!currencyExists) {
+      return res.status(404).json({
+        success: false,
+        error: "Not Found",
+        message: `Валюта с тикером ${upperCurrency} не найдена в базе данных. Сначала добавьте её через POST /api/currencies`,
+      });
+    }
+
+    // Получаем курсы из Binance API
+    const prices = await binanceService.getPricesByCurrency(upperCurrency);
+
+    if (prices.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Not Found",
+        message: `На Binance не найдено торговых пар с валютой ${upperCurrency}`,
+      });
+    }
+
+    // Получаем дополнительную статистику
+    const tickers =
+      await binanceService.getFullTickersByCurrency(upperCurrency);
+
+    // Формируем ответ
+    const result = {
+      success: true,
+      data: {
+        currency: upperCurrency,
+        timestamp: new Date().toISOString(),
+        source: "Binance API",
+        totalPairs: prices.length,
+        pairs: prices.map((price) => {
+          // Находим соответствующую статистику для этой пары
+          const ticker = tickers.find((t) => t.symbol === price.symbol);
+
+          return {
+            symbol: price.symbol,
+            price: price.price,
+            ...(ticker && {
+              priceChange: ticker.priceChange,
+              priceChangePercent: ticker.priceChangePercent,
+              highPrice: ticker.highPrice,
+              lowPrice: ticker.lowPrice,
+              volume: ticker.volume,
+              quoteVolume: ticker.quoteVolume,
+            }),
+          };
+        }),
+      },
+    };
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Binance API Error:", error.message);
+    res.status(500).json({
+      success: false,
+      error: "Internal Server Error",
+      message: "Ошибка при получении данных из Binance API",
+    });
+  }
+});
+
+app.get("/price/all", authenticateToken, async (req, res) => {
+  try {
+    // Получаем все валюты универсальным методом
+    const currencies = await binanceService.getAllCurrencies();
+
+    // Опционально: параметр limit для ограничения количества
+    const limit = req.query.limit ? parseInt(req.query.limit) : null;
+    const resultCurrencies = limit ? currencies.slice(0, limit) : currencies;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        currencies: resultCurrencies,
+        total: currencies.length,
+        displayed: resultCurrencies.length,
+        timestamp: new Date().toISOString(),
+        source: "Binance API (auto-detected)",
+      },
+    });
+  } catch (error) {
+    console.error("Error in /price/all:", error.message);
+    res.status(500).json({
+      success: false,
+      error: "Internal Server Error",
+      message: "Ошибка при получении данных из Binance API",
+    });
+  }
 });
 
 function initializeApp() {

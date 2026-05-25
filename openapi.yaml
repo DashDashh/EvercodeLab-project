@@ -123,7 +123,6 @@ security:
   - bearerAuth: []
 
 paths:
-  # Мониторинг
   /status:
     get:
       summary: Проверка статуса сервера
@@ -171,7 +170,6 @@ paths:
         '403':
           description: Недействительный токен
 
-  # CRUD для валют
   /api/currencies:
     get:
       summary: Получить список всех валют
@@ -287,5 +285,114 @@ paths:
                     type: string
         '404':
           description: Валюта не найдена
+        '401':
+          description: Отсутствует токен авторизации
+
+  /price:
+    get:
+      summary: Получить курсы валюты из Binance
+      description: |
+        Возвращает все торговые пары с указанной валютой и их текущие курсы.
+        Валюта должна существовать в локальной базе данных (добавлена через CRUD).
+      parameters:
+        - name: currency
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 10
+          description: Тикер валюты (например, BTC, ETH, USDT)
+          example: BTC
+      responses:
+        '200':
+          description: Успешный ответ со списком курсов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      currency:
+                        type: string
+                        example: BTC
+                      timestamp:
+                        type: string
+                        format: date-time
+                      source:
+                        type: string
+                        example: Binance API
+                      totalPairs:
+                        type: integer
+                        example: 150
+                      pairs:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            symbol:
+                              type: string
+                              example: BTCUSDT
+                            price:
+                              type: string
+                              example: "50000.00"
+                            priceChange:
+                              type: string
+                              example: "1000.00"
+                            priceChangePercent:
+                              type: string
+                              example: "2.04"
+                            highPrice:
+                              type: string
+                              example: "51000.00"
+                            lowPrice:
+                              type: string
+                              example: "49000.00"
+                            volume:
+                              type: string
+                              example: "1234.56"
+                            quoteVolume:
+                              type: string
+                              example: "61728000.00"
+        '400':
+          description: Отсутствует параметр currency
+        '401':
+          description: Отсутствует токен авторизации
+        '403':
+          description: Недействительный токен
+        '404':
+          description: Валюта не найдена в локальной базе или нет торговых пар на Binance
+
+  /price/all:
+    get:
+      summary: Получить список всех доступных валют на Binance
+      description: Возвращает список всех валют, которые встречаются в торговых парах на Binance
+      responses:
+        '200':
+          description: Список доступных валют
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      currencies:
+                        type: array
+                        items:
+                          type: string
+                      total:
+                        type: integer
+                      timestamp:
+                        type: string
+                        format: date-time
         '401':
           description: Отсутствует токен авторизации
