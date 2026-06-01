@@ -2,9 +2,8 @@ const express = require("express");
 const config = require("./config");
 const { logger } = require("./logger");
 const { scheduleTask, getActiveTasks, stopAllTasks } = require("./scheduler");
-
 const { authenticateToken } = require("./middleware/auth");
-const currencyService = require("./services/currencyService");
+const currencyService = require("./services/currencyDBService");
 const binanceService = require("./services/binanceService");
 
 const app = express();
@@ -34,261 +33,164 @@ app.get("/health", authenticateToken, (req, res) => {
   });
 });
 
-app.get("/api/currencies", authenticateToken, (req, res) => {
-  const currencies = currencyService.getAll();
-  res.status(200).json({
-    success: true,
-    data: currencies,
-    count: currencies.length,
-  });
+app.get("/api/currencies", authenticateToken, async (req, res) => {
+  try {
+    const currencies = await currencyService.getAll();
+    res.status(200).json({
+      success: true,
+      data: currencies,
+      count: currencies.length,
+    });
+  } catch (error) {
+    logger(error.message, "error");
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
 });
 
-app.get("/api/currencies/:id", authenticateToken, (req, res) => {
-  const { id } = req.params;
-  const currency = currencyService.getById(id);
-
-  if (!currency) {
-    return res.status(404).json({
-      success: false,
-      error: "Not Found",
-      message: `Валюта с id ${id} не найдена`,
-    });
+app.get("/api/currencies/:id", authenticateToken, async (req, res) => {
+  try {
+    const currency = await currencyService.getById(req.params.id);
+    if (!currency) {
+      return res.status(404).json({ success: false, error: "Not Found" });
+    }
+    res.status(200).json({ success: true, data: currency });
+  } catch (error) {
+    logger(error.message, "error");
+    res.status(500).json({ success: false, error: "Internal Server Error" });
   }
-
-  res.status(200).json({
-    success: true,
-    data: currency,
-  });
 });
 
-app.post("/api/currencies", authenticateToken, (req, res) => {
-  const { name, ticker } = req.body;
+app.post("/api/currencies", authenticateToken, async (req, res) => {
+  try {
+    const { name, ticker } = req.body;
 
-  if (!name || !ticker) {
-    return res.status(400).json({
-      success: false,
-      error: "Bad Request",
-      message: "Поля name и ticker обязательны",
-    });
-  }
+    if (!name || !ticker) {
+      return res
+        .status(400)
+        .json({ success: false, message: "name и ticker обязательны" });
+    }
 
-  if (typeof name !== "string" || typeof ticker !== "string") {
-    return res.status(400).json({
-      success: false,
-      error: "Bad Request",
-      message: "name и ticker должны быть строками",
-    });
-  }
-
-  if (name.length < 1 || name.length > 100) {
-    return res.status(400).json({
-      success: false,
-      error: "Bad Request",
-      message: "name должен быть от 1 до 100 символов",
-    });
-  }
-
-  if (ticker.length < 1 || ticker.length > 10) {
-    return res.status(400).json({
-      success: false,
-      error: "Bad Request",
-      message: "ticker должен быть от 1 до 10 символов",
-    });
-  }
-
-  if (currencyService.existsByTicker(ticker)) {
-    return res.status(409).json({
-      success: false,
-      error: "Conflict",
-      message: `Валюта с тикером ${ticker.toUpperCase()} уже существует`,
-    });
-  }
-
-  const currency = currencyService.create(name, ticker);
-  res.status(201).json({
-    success: true,
-    data: currency,
-  });
-});
-
-app.put("/api/currencies/:id", authenticateToken, (req, res) => {
-  const { id } = req.params;
-  const { name, ticker } = req.body;
-
-  if (!name && !ticker) {
-    return res.status(400).json({
-      success: false,
-      error: "Bad Request",
-      message:
-        "Нужно указать хотя бы одно поле для обновления (name или ticker)",
-    });
-  }
-
-  const currency = currencyService.getById(id);
-  if (!currency) {
-    return res.status(404).json({
-      success: false,
-      error: "Not Found",
-      message: `Валюта с id ${id} не найдена`,
-    });
-  }
-
-  const newName = name || currency.name;
-  const newTicker = ticker || currency.ticker;
-
-  if (ticker && ticker.toUpperCase() !== currency.ticker) {
-    if (currencyService.existsByTicker(ticker)) {
+    const exists = await currencyService.existsByTicker(ticker);
+    if (exists) {
       return res.status(409).json({
         success: false,
         error: "Conflict",
-        message: `Валюта с тикером ${ticker.toUpperCase()} уже существует`,
+        message: "Тикер уже существует",
       });
     }
-  }
 
-  const updated = currencyService.update(id, newName, newTicker);
-  res.status(200).json({
-    success: true,
-    data: updated,
-  });
+    const currency = await currencyService.create(name, ticker);
+    res.status(201).json({ success: true, data: currency });
+  } catch (error) {
+    logger(error.message, "error");
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
 });
 
-app.delete("/api/currencies/:id", authenticateToken, (req, res) => {
-  const { id } = req.params;
-  const currency = currencyService.getById(id);
-
-  if (!currency) {
-    return res.status(404).json({
-      success: false,
-      error: "Not Found",
-      message: `Валюта с id ${id} не найдена`,
-    });
+app.put("/api/currencies/:id", authenticateToken, async (req, res) => {
+  try {
+    const { name, ticker } = req.body;
+    const currency = await currencyService.update(req.params.id, name, ticker);
+    if (!currency) {
+      return res.status(404).json({ success: false, error: "Not Found" });
+    }
+    res.status(200).json({ success: true, data: currency });
+  } catch (error) {
+    logger(error.message, "error");
+    res.status(500).json({ success: false, error: "Internal Server Error" });
   }
+});
 
-  currencyService.delete(id);
-  res.status(200).json({
-    success: true,
-    message: `Валюта ${currency.name} (${currency.ticker}) успешно удалена`,
-  });
+app.delete("/api/currencies/:id", authenticateToken, async (req, res) => {
+  try {
+    const deleted = await currencyService.delete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: "Not Found" });
+    }
+    res.status(200).json({ success: true, message: "Валюта удалена" });
+  } catch (error) {
+    logger(error.message, "error");
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
 });
 
 app.get("/price", authenticateToken, async (req, res) => {
-  const { currency } = req.query;
-
-  // Валидация параметра currency
-  if (!currency) {
-    return res.status(400).json({
-      success: false,
-      error: "Bad Request",
-      message: 'Параметр "currency" обязателен. Пример: /price?currency=BTC',
-    });
-  }
-
-  if (
-    typeof currency !== "string" ||
-    currency.length < 1 ||
-    currency.length > 10
-  ) {
-    return res.status(400).json({
-      success: false,
-      error: "Bad Request",
-      message: 'Параметр "currency" должен быть строкой от 1 до 10 символов',
-    });
-  }
-
-  const upperCurrency = currency.toUpperCase();
-
   try {
-    // Проверяем, существует ли валюта в нашей базе (по ticker)
-    const currencyExists = currencyService.existsByTicker(upperCurrency);
-
-    if (!currencyExists) {
-      return res.status(404).json({
+    const { currency } = req.query;
+    if (!currency) {
+      return res.status(400).json({
         success: false,
-        error: "Not Found",
-        message: `Валюта с тикером ${upperCurrency} не найдена в базе данных. Сначала добавьте её через POST /api/currencies`,
+        message: "Параметр currency обязателен",
       });
     }
 
-    // Получаем курсы из Binance API
+    const upperCurrency = currency.toUpperCase();
+    const exists = await currencyService.existsByTicker(upperCurrency);
+
+    if (!exists) {
+      return res.status(404).json({
+        success: false,
+        message: `Валюта ${upperCurrency} не найдена в базе данных`,
+      });
+    }
+
     const prices = await binanceService.getPricesByCurrency(upperCurrency);
 
-    if (prices.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: "Not Found",
-        message: `На Binance не найдено торговых пар с валютой ${upperCurrency}`,
-      });
-    }
-
-    // Получаем дополнительную статистику
-    const tickers =
-      await binanceService.getFullTickersByCurrency(upperCurrency);
-
-    // Формируем ответ
-    const result = {
+    res.status(200).json({
       success: true,
       data: {
         currency: upperCurrency,
-        timestamp: new Date().toISOString(),
         source: "Binance API",
         totalPairs: prices.length,
-        pairs: prices.map((price) => {
-          // Находим соответствующую статистику для этой пары
-          const ticker = tickers.find((t) => t.symbol === price.symbol);
-
-          return {
-            symbol: price.symbol,
-            price: price.price,
-            ...(ticker && {
-              priceChange: ticker.priceChange,
-              priceChangePercent: ticker.priceChangePercent,
-              highPrice: ticker.highPrice,
-              lowPrice: ticker.lowPrice,
-              volume: ticker.volume,
-              quoteVolume: ticker.quoteVolume,
-            }),
-          };
-        }),
+        pairs: prices.map((p) => ({
+          symbol: p.symbol,
+          price: p.price,
+        })),
       },
-    };
-
-    res.status(200).json(result);
+    });
   } catch (error) {
-    console.error("Binance API Error:", error.message);
+    logger(error.message, "error");
     res.status(500).json({
       success: false,
       error: "Internal Server Error",
-      message: "Ошибка при получении данных из Binance API",
+      message: error.message,
     });
   }
 });
 
 app.get("/price/all", authenticateToken, async (req, res) => {
   try {
-    // Получаем все валюты универсальным методом
-    const currencies = await binanceService.getAllCurrencies();
+    const allPrices = await binanceService.getAllPrices();
 
-    // Опционально: параметр limit для ограничения количества
-    const limit = req.query.limit ? parseInt(req.query.limit) : null;
-    const resultCurrencies = limit ? currencies.slice(0, limit) : currencies;
+    const currenciesSet = new Set();
+
+    allPrices.forEach((item) => {
+      const symbol = item.symbol;
+      const match = symbol.match(
+        /^([A-Z]{2,5})(USDT|BUSD|BTC|ETH|BNB|USDC|DAI|TUSD)$/,
+      );
+      if (match && match[1].length >= 2 && match[1].length <= 5) {
+        currenciesSet.add(match[1]);
+      }
+    });
+
+    const currencies = Array.from(currenciesSet).sort();
 
     res.status(200).json({
       success: true,
       data: {
-        currencies: resultCurrencies,
+        currencies: currencies,
         total: currencies.length,
-        displayed: resultCurrencies.length,
         timestamp: new Date().toISOString(),
-        source: "Binance API (auto-detected)",
+        source: "Binance API",
       },
     });
   } catch (error) {
-    console.error("Error in /price/all:", error.message);
+    logger(error.message, "error");
     res.status(500).json({
       success: false,
       error: "Internal Server Error",
-      message: "Ошибка при получении данных из Binance API",
+      message: error.message,
     });
   }
 });
@@ -314,7 +216,6 @@ function runCustomLoggerDemo() {
 
 function setupPeriodicTasks() {
   console.log("\n--- Running periodic tasks ---\n");
-
   const runningTask = scheduleTask(
     "running-logger",
     10000,
@@ -323,7 +224,6 @@ function setupPeriodicTasks() {
     },
     (errorMsg) => logger(errorMsg, "error"),
   );
-
   return runningTask;
 }
 
@@ -331,15 +231,6 @@ function displayActiveTasks() {
   console.log("\nThe active tasks:");
   getActiveTasks().forEach((task) => {
     console.log(`  ${task.name} (interval: ${task.interval}ms)`);
-  });
-}
-
-function setupGracefulShutdown() {
-  process.on("SIGINT", () => {
-    console.log("\n\nThe completion signal has been received...");
-    stopAllTasks();
-    logger("Application completed", "info");
-    process.exit(0);
   });
 }
 
@@ -352,6 +243,24 @@ function startServer() {
     logger(`Health check: http://localhost:${PORT}/status`, "info");
   });
   return server;
+}
+
+function setupGracefulShutdown() {
+  process.on("SIGINT", async () => {
+    console.log("\n\nThe completion signal has been received...");
+    stopAllTasks();
+    await currencyService.close();
+    logger("Database connection closed", "info");
+    logger("Application completed", "info");
+
+    if (server) {
+      server.close(() => {
+        process.exit(0);
+      });
+    } else {
+      process.exit(0);
+    }
+  });
 }
 
 function main() {
