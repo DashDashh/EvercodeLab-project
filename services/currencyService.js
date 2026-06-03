@@ -1,45 +1,48 @@
-const Currency = require("../models/Currency");
+const CurrencyRepository = require("./repositories/CurrencyRepository");
 
 class CurrencyService {
-  constructor() {
-    this.currencies = new Map();
-    this.nextId = 1;
+  constructor(repository) {
+    this.repository = repository;
   }
 
-  create(name, ticker) {
-    const id = String(this.nextId++);
-    const currency = new Currency(id, name, ticker.toUpperCase());
-    this.currencies.set(id, currency);
-    return currency;
+  async create(name, ticker) {
+    const currency = await this.repository.createCurrency(name, ticker);
+    return this.repository.transformToJSON(currency);
   }
 
-  getAll() {
-    return Array.from(this.currencies.values()).map((c) => c.toJSON());
+  async getAll() {
+    const currencies = await this.repository.findAllOrdered();
+    return this.repository.transformManyToJSON(currencies);
   }
 
-  getById(id) {
-    const currency = this.currencies.get(id);
-    return currency ? currency.toJSON() : null;
+  async getById(id) {
+    const currency = await this.repository.findById(id);
+    return this.repository.transformToJSON(currency);
   }
 
-  update(id, name, ticker) {
-    const currency = this.currencies.get(id);
-    if (!currency) {
-      return null;
-    }
-    currency.update(name, ticker.toUpperCase());
-    return currency.toJSON();
+  async getByTicker(ticker) {
+    const currency = await this.repository.findByTicker(ticker);
+    return this.repository.transformToJSON(currency);
   }
 
-  delete(id) {
-    return this.currencies.delete(id);
+  async update(id, name, ticker) {
+    const currency = await this.repository.updateCurrency(id, name, ticker);
+    return this.repository.transformToJSON(currency);
   }
 
-  existsByTicker(ticker) {
-    return Array.from(this.currencies.values()).some(
-      (c) => c.ticker === ticker.toUpperCase(),
-    );
+  async delete(id) {
+    return this.repository.delete(id);
+  }
+
+  async existsByTicker(ticker) {
+    return this.repository.existsByTicker(ticker);
+  }
+
+  async close() {
+    await this.repository.close();
   }
 }
 
-module.exports = new CurrencyService();
+const currencyService = new CurrencyService(CurrencyRepository);
+
+module.exports = currencyService;

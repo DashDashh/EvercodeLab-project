@@ -1,128 +1,151 @@
 const request = require("supertest");
-const { app } = require("../app");
+const app = require("../app");
 const config = require("../config");
-const currencyService = require("../services/currencyDbService");
+const CurrencyRepository = require("../services/repositories/CurrencyRepository");
 
 describe("Currencies CRUD API", () => {
   let authToken;
-  let createdCurrencyId;
 
   beforeAll(async () => {
     authToken = config.apiToken;
+  });
 
-    const db = await currencyService.getDb();
+  beforeEach(async () => {
+    const db = await CurrencyRepository.getDb();
     await db.run("DELETE FROM currencies");
     await db.run('DELETE FROM sqlite_sequence WHERE name="currencies"');
   });
 
   afterAll(async () => {
-    await currencyService.close();
+    await CurrencyRepository.close();
   });
 
-  describe("POST /api/currencies", () => {
-    test("должен создать валюту с валидными данными", async () => {
-      const response = await request(app)
-        .post("/api/currencies")
-        .set("Authorization", `Bearer ${authToken}`)
-        .send({
-          name: "Bitcoin",
-          ticker: "BTC",
-        })
-        .expect(201);
+  test("POST /api/currencies - должен создать валюту с валидными данными", async () => {
+    const response = await request(app)
+      .post("/api/currencies")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({
+        name: "Bitcoin",
+        ticker: "BTC",
+      })
+      .expect(201);
 
-      expect(response.body.success).toBe(true);
-      expect(response.body.data).toHaveProperty("id");
-      expect(response.body.data.name).toBe("Bitcoin");
-      expect(response.body.data.ticker).toBe("BTC");
-
-      createdCurrencyId = response.body.data.id;
-      console.log(`Created currency with ID: ${createdCurrencyId}`);
-    });
-
-    test("должен вернуть 409 при дубликате ticker", async () => {
-      const response = await request(app)
-        .post("/api/currencies")
-        .set("Authorization", `Bearer ${authToken}`)
-        .send({
-          name: "Bitcoin Cash",
-          ticker: "BTC",
-        })
-        .expect(409);
-
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe("Conflict");
-    });
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toHaveProperty("id");
+    expect(response.body.data.name).toBe("Bitcoin");
+    expect(response.body.data.ticker).toBe("BTC");
   });
 
-  describe("GET /api/currencies", () => {
-    test("должен вернуть список всех валют", async () => {
-      const response = await request(app)
-        .get("/api/currencies")
-        .set("Authorization", `Bearer ${authToken}`)
-        .expect(200);
+  test("POST /api/currencies - должен вернуть 409 при дубликате ticker", async () => {
+    await request(app)
+      .post("/api/currencies")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({
+        name: "Bitcoin",
+        ticker: "BTC",
+      })
+      .expect(201);
 
-      expect(response.body.success).toBe(true);
-      expect(Array.isArray(response.body.data)).toBe(true);
-      expect(response.body.data.length).toBe(1);
-      expect(response.body.data[0].name).toBe("Bitcoin");
-    });
+    const response = await request(app)
+      .post("/api/currencies")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({
+        name: "Bitcoin Cash",
+        ticker: "BTC",
+      })
+      .expect(409);
+
+    expect(response.body.success).toBe(false);
+    expect(response.body.error).toBe("Conflict");
   });
 
-  describe("GET /api/currencies/:id", () => {
-    test("должен вернуть валюту по id", async () => {
-      expect(createdCurrencyId).toBeDefined();
+  test("GET /api/currencies - должен вернуть список всех валют", async () => {
+    await request(app)
+      .post("/api/currencies")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ name: "Bitcoin", ticker: "BTC" })
+      .expect(201);
 
-      const response = await request(app)
-        .get(`/api/currencies/${createdCurrencyId}`)
-        .set("Authorization", `Bearer ${authToken}`)
-        .expect(200);
+    await request(app)
+      .post("/api/currencies")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ name: "Ethereum", ticker: "ETH" })
+      .expect(201);
 
-      expect(response.body.data.id).toBe(createdCurrencyId);
-      expect(response.body.data.name).toBe("Bitcoin");
-    });
+    const response = await request(app)
+      .get("/api/currencies")
+      .set("Authorization", `Bearer ${authToken}`)
+      .expect(200);
 
-    test("должен вернуть 404 для несуществующего id", async () => {
-      await request(app)
-        .get("/api/currencies/99999")
-        .set("Authorization", `Bearer ${authToken}`)
-        .expect(404);
-    });
+    expect(response.body.success).toBe(true);
+    expect(Array.isArray(response.body.data)).toBe(true);
+    expect(response.body.data.length).toBe(2);
   });
 
-  describe("PUT /api/currencies/:id", () => {
-    test("должен обновить валюту", async () => {
-      expect(createdCurrencyId).toBeDefined();
+  test("GET /api/currencies/:id - должен вернуть валюту по id", async () => {
+    const createResponse = await request(app)
+      .post("/api/currencies")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ name: "Bitcoin", ticker: "BTC" })
+      .expect(201);
 
-      const response = await request(app)
-        .put(`/api/currencies/${createdCurrencyId}`)
-        .set("Authorization", `Bearer ${authToken}`)
-        .send({ name: "Bitcoin Updated" })
-        .expect(200);
+    const currencyId = createResponse.body.data.id;
 
-      expect(response.body.data.name).toBe("Bitcoin Updated");
-    });
+    const response = await request(app)
+      .get(`/api/currencies/${currencyId}`)
+      .set("Authorization", `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(response.body.data.id).toBe(currencyId);
+    expect(response.body.data.name).toBe("Bitcoin");
   });
 
-  describe("DELETE /api/currencies/:id", () => {
-    test("должен удалить валюту", async () => {
-      const createResponse = await request(app)
-        .post("/api/currencies")
-        .set("Authorization", `Bearer ${authToken}`)
-        .send({ name: "To Delete", ticker: "DEL" })
-        .expect(201);
+  test("GET /api/currencies/:id - должен вернуть 404 для несуществующего id", async () => {
+    await request(app)
+      .get("/api/currencies/99999")
+      .set("Authorization", `Bearer ${authToken}`)
+      .expect(404);
+  });
 
-      const deleteId = createResponse.body.data.id;
-      expect(deleteId).toBeDefined();
+  test("PUT /api/currencies/:id - должен обновить валюту", async () => {
+    const createResponse = await request(app)
+      .post("/api/currencies")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ name: "Bitcoin", ticker: "BTC" })
+      .expect(201);
 
-      await request(app)
-        .delete(`/api/currencies/${deleteId}`)
-        .set("Authorization", `Bearer ${authToken}`)
-        .expect(200);
+    const currencyId = createResponse.body.data.id;
 
-      await request(app)
-        .get(`/api/currencies/${deleteId}`)
-        .set("Authorization", `Bearer ${authToken}`)
-        .expect(404);
-    });
+    const response = await request(app)
+      .put(`/api/currencies/${currencyId}`)
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ name: "Bitcoin Updated" })
+      .expect(200);
+
+    expect(response.body.data.name).toBe("Bitcoin Updated");
+  });
+
+  test("DELETE /api/currencies/:id - должен удалить валюту", async () => {
+    const createResponse = await request(app)
+      .post("/api/currencies")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ name: "To Delete", ticker: "DEL" })
+      .expect(201);
+
+    const deleteId = createResponse.body.data.id;
+    expect(deleteId).toBeDefined();
+
+    const deleteResponse = await request(app)
+      .delete(`/api/currencies/${deleteId}`)
+      .set("Authorization", `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(deleteResponse.body.success).toBe(true);
+    expect(deleteResponse.body.message).toBe("Валюта удалена");
+
+    await request(app)
+      .get(`/api/currencies/${deleteId}`)
+      .set("Authorization", `Bearer ${authToken}`)
+      .expect(404);
   });
 });

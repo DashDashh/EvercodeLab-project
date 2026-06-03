@@ -1,34 +1,29 @@
-const { connectDB, initTables } = require("../config/database");
+const { connectDB, initTables, dbPath } = require("../config/database");
 const path = require("path");
 const fs = require("fs");
 
 async function initializeDatabase() {
-  console.log("Initializing database...\n");
+  console.log("\nInitializing database...\n");
 
-  const dbDir = path.join(__dirname, "..", "data");
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-    console.log(`Created database directory: ${dbDir}`);
-  }
+  let db = null;
 
   try {
-    const db = await connectDB();
-
+    db = await connectDB();
     await initTables(db);
-    console.log("Tables created successfully");
+    console.log("Database tables initialized");
 
-    const count = await db.get("SELECT COUNT(*) as count FROM currencies");
-    console.log(`Current currencies count: ${count.count}`);
+    const result = await db.get("SELECT COUNT(*) as count FROM currencies");
+    console.log(`Current currencies count: ${result.count}`);
 
-    await db.close();
-
-    console.log("\nDatabase initialization completed!");
-    console.log(
-      `Database file location: ${require("../config/database").dbPath}`,
-    );
+    console.log("\nDatabase initialization completed successfully!");
+    console.log(`Database file location: ${dbPath}`);
   } catch (error) {
     console.error("\nDatabase initialization failed:", error.message);
     process.exit(1);
+  } finally {
+    if (db) {
+      await db.close();
+    }
   }
 }
 

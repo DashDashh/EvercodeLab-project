@@ -1,23 +1,23 @@
 const sqlite3 = require("sqlite3");
 const { open } = require("sqlite");
 const path = require("path");
+const fs = require("fs");
 
 const dbPath =
   process.env.DB_PATH || path.join(__dirname, "..", "data", "currencies.db");
 
 async function connectDB() {
-  try {
-    const db = await open({
-      filename: dbPath,
-      driver: sqlite3.Database,
-    });
-
-    console.log(`Database connected: ${dbPath}`);
-    return db;
-  } catch (error) {
-    console.error("Database connection error:", error);
-    throw error;
+  const dbDir = path.dirname(dbPath);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
   }
+
+  const db = await open({
+    filename: dbPath,
+    driver: sqlite3.Database,
+  });
+
+  return db;
 }
 
 async function initTables(db) {
@@ -35,8 +35,6 @@ async function initTables(db) {
     CREATE INDEX IF NOT EXISTS idx_currencies_ticker 
     ON currencies (ticker)
   `);
-
-  console.log("Database tables initialized");
 }
 
 module.exports = {
