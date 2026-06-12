@@ -1,6 +1,4 @@
 const { connectDB, initTables, dbPath } = require("../config/database");
-const path = require("path");
-const fs = require("fs");
 
 async function initializeDatabase() {
   console.log("\nInitializing database...\n");
@@ -12,8 +10,15 @@ async function initializeDatabase() {
     await initTables(db);
     console.log("Database tables initialized");
 
-    const result = await db.get("SELECT COUNT(*) as count FROM currencies");
-    console.log(`Current currencies count: ${result.count}`);
+    const currenciesCount = await db.get(
+      "SELECT COUNT(*) as count FROM currencies",
+    );
+    console.log(`Current currencies count: ${currenciesCount.count}`);
+
+    const ratesCount = await db.get(
+      "SELECT COUNT(*) as count FROM exchange_rates",
+    );
+    console.log(`Current exchange rates count: ${ratesCount.count}`);
 
     console.log("\nDatabase initialization completed successfully!");
     console.log(`Database file location: ${dbPath}`);

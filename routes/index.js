@@ -12,11 +12,4 @@ router.use("/health", healthRoutes);
 router.use("/api/currencies", currencyRoutes);
 router.use("/price", priceRoutes);
 
-try {
-  const swaggerUi = require("swagger-ui-express");
-  const YAML = require("yamljs");
-  const swaggerDocument = YAML.load("./openapi.yaml");
-  router.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
-} catch (error) {}
-
 module.exports = router;

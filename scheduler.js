@@ -1,76 +1,85 @@
-const activeTasks = new Map();
+const { logger } = require("./utils/logger");
+const priceUpdateService = require("./services/PriceUpdateService");
 
-function scheduleTask(name, interval, task, onError = console.error) {
-  if (typeof name !== "string" || name.trim() === "") {
-    throw new Error("The task name must be a non-empty string");
+class TaskScheduler {
+  constructor() {
+    this.tasks = new Map();
+    this.intervals = [];
   }
 
-  if (typeof interval !== "number" || interval <= 0) {
-    throw new Error("The interval must be a positive number");
-  }
-
-  if (typeof task !== "function") {
-    throw new Error("The task must be function");
-  }
-
-  if (activeTasks.has(name)) {
-    stopTask(name);
-  }
-
-  const intervalId = setInterval(() => {
-    try {
-      task();
-    } catch (error) {
-      onError(`Error in task "${name}": ${error.message}`);
+  scheduleTask(name, intervalMs, taskFn, errorHandler) {
+    if (this.tasks.has(name)) {
+      logger(
+        `Task "${name}" already exists, stopping previous instance`,
+        "warn",
+      );
+      this.stopTask(name);
     }
-  }, interval);
 
-  activeTasks.set(name, {
-    id: intervalId,
-    interval: interval,
-    name: name,
-    startTime: new Date(),
-  });
+    const intervalId = setInterval(async () => {
+      try {
+        logger(`Executing task "${name}"`, "debug");
+        await taskFn();
+      } catch (error) {
+        logger(`Error in task "${name}": ${error.message}`, "error");
+        if (errorHandler) {
+          errorHandler(error.message);
+        }
+      }
+    }, intervalMs);
 
-  return {
-    stop: () => stopTask(name),
-    isRunning: () => activeTasks.has(name),
-    getName: () => name,
-    getInterval: () => interval,
-  };
-}
+    this.tasks.set(name, { intervalId, intervalMs, name });
+    this.intervals.push(intervalId);
 
-function stopTask(name) {
-  const task = activeTasks.get(name);
+    logger(`Task "${name}" scheduled with interval ${intervalMs}ms`, "info");
+    return { name, intervalMs };
+  }
 
-  if (!task) {
+  stopTask(name) {
+    const task = this.tasks.get(name);
+    if (task) {
+      clearInterval(task.intervalId);
+      this.tasks.delete(name);
+      this.intervals = this.intervals.filter((id) => id !== task.intervalId);
+      logger(`Task "${name}" stopped`, "info");
+      return true;
+    }
     return false;
   }
 
-  clearInterval(task.id);
-  activeTasks.delete(name);
-  return true;
-}
-
-function stopAllTasks() {
-  for (const [name, task] of activeTasks) {
-    clearInterval(task.id);
+  stopAllTasks() {
+    this.intervals.forEach((intervalId) => clearInterval(intervalId));
+    this.tasks.clear();
+    this.intervals = [];
+    logger("All tasks stopped", "info");
   }
-  activeTasks.clear();
+
+  getActiveTasks() {
+    return Array.from(this.tasks.values()).map((task) => ({
+      name: task.name,
+      interval: task.intervalMs,
+    }));
+  }
 }
 
-function getActiveTasks() {
-  return Array.from(activeTasks.entries()).map(([name, task]) => ({
-    name: name,
-    interval: task.interval,
-    startTime: task.startTime,
-    runningTime: Date.now() - task.startTime.getTime(),
-  }));
+const scheduler = new TaskScheduler();
+
+function startPriceUpdateTask() {
+  return scheduler.scheduleTask(
+    "price-updater",
+    60000,
+    async () => {
+      await priceUpdateService.updateAllCurrenciesPrices();
+    },
+    (errorMsg) => logger(`Price update task error: ${errorMsg}`, "error"),
+  );
 }
 
 module.exports = {
-  scheduleTask,
-  stopTask,
-  stopAllTasks,
-  getActiveTasks,
+  scheduler,
+  scheduleTask: scheduler.scheduleTask.bind(scheduler),
+  stopTask: scheduler.stopTask.bind(scheduler),
+  stopAllTasks: scheduler.stopAllTasks.bind(scheduler),
+  getActiveTasks: scheduler.getActiveTasks.bind(scheduler),
+  startPriceUpdateTask,
 };

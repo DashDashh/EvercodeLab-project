@@ -2,9 +2,9 @@
   "name": "evercodelab-project",
   "version": "1.0.0",
   "description": "Project for EvercodeLab",
-  "main": "app.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node app.js",
+    "start": "node server.js",
     "dev": "node --watch app.js",
     "test": "jest",
     "test:watch": "jest --watch",

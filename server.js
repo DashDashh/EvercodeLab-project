@@ -1,17 +1,27 @@
 const app = require("./app");
 const config = require("./config");
 const { logger } = require("./utils/logger");
-const { scheduleTask, getActiveTasks, stopAllTasks } = require("./scheduler");
-const currencyService = require("./services/currencyDbService");
+const {
+  scheduler,
+  stopAllTasks,
+  startPriceUpdateTask,
+  getActiveTasks,
+} = require("./scheduler");
+const currencyService = require("./services/currencyService");
 
 let server = null;
 
 function setupPeriodicTasks() {
-  console.log("\n--- Running periodic tasks ---\n");
-  return scheduleTask(
-    "running-logger",
+  console.log("\n--- Setting up periodic tasks ---\n");
+
+  startPriceUpdateTask();
+
+  scheduler.scheduleTask(
+    "demo-logger",
     10000,
-    () => logger("running", "info"),
+    () => {
+      logger("running", "info");
+    },
     (errorMsg) => logger(errorMsg, "error"),
   );
 }
@@ -45,7 +55,6 @@ async function startServer() {
   server = app.listen(PORT, () => {
     logger(`HTTP server listening on port ${PORT}`, "info");
     logger(`Health check: http://localhost:${PORT}/status`, "info");
-    logger(`API docs: http://localhost:${PORT}/api-docs`, "info");
   });
 
   return server;
@@ -56,6 +65,7 @@ async function main() {
   logger(`Running in ${config.environment} mode`, "info");
   logger(`Version: ${config.version}`, "debug");
 
+  // Демо логи
   logger("This is an informational message", "info");
   logger("This is a warning message", "warn");
   logger("This is an error message", "error");
